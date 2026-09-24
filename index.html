@@ -1090,6 +1090,8 @@ body.red-alert .canopy .wl1, body.red-alert .canopy .wl3{opacity:0;}
 #winter-wolf[data-pose="stalk"] .wl-head{transform:rotate(-16deg);}
 #winter-wolf[data-pose="trot"] .wl-head{transform:rotate(-6deg);}
 #winter-wolf[data-pose="howl"] .wl-head{transform:rotate(40deg);}
+#winter-wolf[data-pose="alert"] .wl-head{transform:rotate(9deg);}
+#winter-wolf[data-pose="alert"] .wl-tail{transform:rotate(-16deg);}
 #winter-wolf[data-pose="stalk"] .wl-tail{transform:rotate(-8deg);}
 #winter-wolf[data-pose="howl"] .wl-tail{transform:rotate(6deg);}
 /* happy: the tail goes, slowly, while it lies beside you */
@@ -6177,7 +6179,9 @@ setInterval(applySakuraTime, 5000);
 /* ── Winter: the wolf ──────────────────────────────────────────────────
    Five words right in a run and a wild wolf comes out of the trees at the
    edge of the ridge and stands watching you. Every word you get right after
-   that, it creeps a little closer; lose one and it backs off. At ten it is
+   that, it creeps a little closer; lose one and it backs off. A wrong letter
+   puts it on edge, and two wrong in a row sends it off and starts the count
+   again (see wolfOnLetter). At ten it is
    yours: it trots over and lies down beside you, and from then on it howls
    along whenever you win a word. It lasts the run.
 
@@ -6190,34 +6194,36 @@ setInterval(applySakuraTime, 5000);
    layer ever moves. */
 const WOLF_W = 92;                       // drawn width, px (viewBox 100 x 72)
 const WOLF_HEAD =
-  /* the far ear, then the head and muzzle, the near ear, eye and nose */
+  /* the far ear, then the head and muzzle (a ruff of fur at the cheek),
+     the near ear, eye and nose */
   '<path class="sh" d="M 23.5 16.5 L 26.5 9 L 28.6 18.2 Z"/>' +
-  '<path class="sh" d="M 28.5 25 C 29.4 18.2, 24.2 14, 18 15.8 C 14 17, 11 20, 6 23 C 3.8 24.5, 4.8 26.8, 8 26.8 L 19 28.2 C 24.6 28.8, 28 27.6, 28.5 25 Z"/>' +
+  '<path class="sh" d="M 28.5 25 C 29.4 18.2, 24.2 14, 18 15.8 C 14 17, 11 20, 6 23 C 3.8 24.5, 4.8 26.8, 8 26.8 ' +
+    'L 19 28.2 L 21.6 30.2 L 22.8 28.8 L 25.8 30.8 L 26.4 28.4 L 29.4 28.8 Z"/>' +
   '<path class="sh" d="M 18.6 17.2 L 20.4 7.6 L 25 16 Z"/>' +
   '<circle class="dot" cx="16.4" cy="20.6" r="1.7"/><circle class="dot" cx="5.6" cy="24.4" r="1.6"/>';
+/* its coat: one shaggy mass over the stick frame */
+const WOLF_COAT = '<path class="sh" d=\"M 27 36.5 L 26 32.6 L 29.2 31.8 L 29 28.2 L 32.2 29 L 33.4 29.6 L 35.8 31 L 39 28.2 L 41.5 30 L 45.5 27.6 L 48 29.4 L 52 27.6 L 54.5 29.4 L 58.5 28 L 61 30 L 64.5 29 L 67 31.4 L 70.5 30.6 L 72.6 33.4 L 74.6 34 L 73.6 37.4 L 74.6 40.4 L 71 41.4 L 68 42.6 L 65.5 40.4 L 62 41 L 59.5 39.2 L 55.5 40.4 L 53 39.8 L 49 42.4 L 46.5 42.2 L 42.5 46 L 40 45 L 36.8 47.8 L 34.5 45.6 L 31.5 46.6 L 29.6 42.6 L 26.6 41.6 L 28.4 39 Z\"/>';
 const WOLF_SVG =
   '<svg class="wolf-art" viewBox="0 0 100 72" width="' + WOLF_W + '" height="' + Math.round(WOLF_W * 0.72) + '">' +
-  /* standing / walking / howling */
+  /* standing / walking / howling — legs first, so they come out from under the coat */
   '<g class="wl-stand">' +
-    '<g class="wl-tail" style="transform-origin:70px 37px"><path class="sh" d="M 70 37 C 80 38, 86.5 46, 88.5 58.5 C 83 56.5, 77.5 50.5, 71 41.5 Z"/></g>' +
-    '<g class="wl-leg b" style="transform-origin:70px 37px"><path class="ln" d="M 70 37 L 76 52.5 L 72.5 68"/></g>' +
-    '<g class="wl-leg b" style="transform-origin:34px 36px"><path class="ln" d="M 34 36 L 31 68"/></g>' +
-    '<path class="ln" d="M 34 36 C 46 31.5, 58 32, 70 37"/>' +
-    '<g class="wl-leg a" style="transform-origin:70px 37px"><path class="ln" d="M 70 37 L 72 53 L 67 68"/></g>' +
-    '<g class="wl-leg a" style="transform-origin:34px 36px"><path class="ln" d="M 34 36 L 38 68"/></g>' +
-    '<path class="ln" d="M 34 36 L 29.5 30"/>' +
+    '<g class="wl-leg b" style="transform-origin:69px 40px"><path class="ln" d="M 69 40 L 76 53 L 72.5 68"/></g>' +
+    '<g class="wl-leg b" style="transform-origin:35px 41px"><path class="ln" d="M 35 41 L 31 68"/></g>' +
+    '<g class="wl-leg a" style="transform-origin:69px 40px"><path class="ln" d="M 69 40 L 72 53.5 L 67 68"/></g>' +
+    '<g class="wl-leg a" style="transform-origin:35px 41px"><path class="ln" d="M 35 41 L 38 68"/></g>' +
+    '<g class="wl-tail" style="transform-origin:71px 37px"><path class="sh" d=\"M 71 35 C 79 35.5, 85 41, 88 48.5 L 90.2 51.5 L 88.2 52.4 L 89.6 56 L 87 55.4 L 86.4 58.4 L 84 55.8 L 82 57.2 L 81.2 53.4 L 78.4 52.6 L 78.2 49.4 L 75 47.6 L 74.6 44 L 71.5 42 Z\"/></g>' +
+    WOLF_COAT +
     /* a big head, as the stickman has, carried low on a short neck */
     '<g class="wl-head" style="transform-origin:29.5px 30px"><g transform="translate(29.5 30) scale(1.36) translate(-28 -26)">' + WOLF_HEAD + '</g></g>' +
   '</g>' +
   /* lying down beside you, front paws out, head up */
   '<g class="wl-lie">' +
-    '<g class="wl-tail" style="transform-origin:74px 57px"><path class="sh" d="M 74 57 C 84 59, 90 63.5, 95 67.5 C 87 68.5, 80 67.5, 74 62.5 Z"/></g>' +
-    '<path class="ln" d="M 74 57 L 63 66.5 L 77 67.5"/>' +
-    '<path class="ln" d="M 38 57.5 L 24 67.5 L 15 67.5"/>' +
-    '<path class="ln" d="M 36 56 C 48 51.5, 62 51.5, 74 57"/>' +
-    '<path class="ln" d="M 36 56 L 21 66 L 11.5 66"/>' +
-    '<path class="ln" d="M 36 56 L 32 49"/>' +
-    '<g transform="translate(32 49) scale(1.36) translate(-28 -26)">' + WOLF_HEAD + '</g>' +
+    '<path class="ln" d="M 38 60 L 24 67.5 L 15 67.5"/>' +
+    '<path class="ln" d="M 36 60 L 21 66 L 11.5 66"/>' +
+    '<g class="wl-tail" style="transform-origin:75px 58px"><path class="sh" d=\"M 75 57 C 83 58, 88.5 61.4, 92.5 64 L 95.8 64.2 L 94.4 66.2 L 96.6 68.2 L 93 68.4 L 91.6 70 L 89.6 68.2 L 86.8 69 L 86 66.8 L 82.4 66.8 L 81.8 64.4 L 77.6 63.8 L 76 61.6 Z\"/></g>' +
+    '<g transform="translate(2 21)">' + WOLF_COAT + '</g>' +
+    '<path class="ln" d="M 76 61 L 66 66.5 L 78 67.5"/>' +
+    '<g transform="translate(32 50) scale(1.36) translate(-28 -26)">' + WOLF_HEAD + '</g>' +
   '</g>' +
   '</svg>';
 const WOLF_APPEAR_AT = 5, WOLF_TAME_AT = 10;
@@ -6299,7 +6305,35 @@ function wolfGo(x, gait, ms, end, done){
             { duration: ms, easing: 'cubic-bezier(.35,.05,.4,1)' }).finished.then(settle).catch(settle);
 }
 
+/* Every letter counts. A wrong one puts it on edge — it gets up and stares,
+   head and tail up. Two wrong in a row and it bolts, and the count starts
+   over from nothing, whether it had come to you yet or not. A right letter
+   settles it again. */
+let wolfMisses = 0;
+function wolfOnLetter(hit){
+  if(!isWinter()) return;
+  if(hit){
+    wolfMisses = 0;
+    if(wolfStage === 'tame') wolfPose('rest', 'L');
+    else if(wolfStage === 'wild') wolfPose('watch', 'L');
+    return;
+  }
+  wolfMisses++;
+  if(wolfMisses >= 2){ wolfMisses = 0; wolfFlee(); return; }
+  if(wolfStage !== 'none') wolfPose('alert', 'L');
+}
+function wolfFlee(){
+  const was = wolfStage;
+  wolfCorrect = 0; wolfBack = 0; wolfPending = null; wolfStage = 'none';
+  if(was === 'none' || !document.getElementById('winter-wolf')) return;
+  wolfGo(wolfGround().off, 'trot', 900, 'trot', () => {
+    const w = document.getElementById('winter-wolf');
+    if(w && wolfStage === 'none') w.remove();
+  });
+}
+
 function wolfReset(){
+  wolfMisses = 0;
   wolfCorrect = 0; wolfStage = 'none'; wolfBack = 0; wolfPending = null;
   const w = document.getElementById('winter-wolf');
   if(w) w.remove();
@@ -7355,6 +7389,7 @@ function guess(letter){
 
   if(currentWord.includes(letter)){
     btn.className = 'key guessed-correct';
+    wolfOnLetter(true);
     renderWord(letter);
     if([...currentWord].every(c => c===' ' || c==='-' || guessedLetters.has(c))){
       roundOver = true;
@@ -7364,6 +7399,7 @@ function guess(letter){
   } else {
     btn.className = 'key guessed-wrong';
     triesLeft--; renderTries(); popBalloon();
+    wolfOnLetter(false);
     if(triesLeft <= 0){
       roundOver = true;
       setTimeout(()=>showResult(false), 400);
