@@ -1009,8 +1009,9 @@ body.red-alert .canopy .wl1, body.red-alert .canopy .wl3{opacity:0;}
 .gimmick-test .btn{margin:0;padding:6px 12px;font-size:13px;}
 /* .btn sets display, which would beat the browser's own [hidden] rule */
 .gimmick-test[hidden], .gimmick-test .btn[hidden]{display:none;}
+.gimmick-test .btn.held{filter:brightness(1.3) saturate(1.2);transform:scale(.95);box-shadow:0 0 0 3px rgba(255,255,255,.55);}
 /* while fast-forwarding, the light changes quickly instead of over 5s */
-body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .35s linear;}
+body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .2s linear;}
 
 /* ── Cherry Blossom: the day going by ─────────────────────────────── */
 .sky-tint{position:absolute;inset:0;pointer-events:none;opacity:0;will-change:opacity;
@@ -1175,6 +1176,18 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .35
   font: 600 12.5px 'Nunito', sans-serif; cursor: text !important;
 }
 #dev-pass::placeholder { color: var(--text); opacity: .45; }
+#dev-entry { display: flex; gap: 6px; }
+#dev-entry #dev-pass { flex: 1; min-width: 0; width: auto !important; }
+#dev-go {
+  flex: none; padding: 5px 9px; border: none; border-radius: 8px; background: var(--text);
+  color: var(--panel); font: 700 12px 'Nunito', sans-serif; cursor: pointer;
+}
+#dev-msg { font: 700 11.5px/1.35 'Nunito', sans-serif; margin-top: 6px; }
+#dev-msg:empty { display: none; }
+#dev-msg.ok { color: #1E9E55; }
+#dev-msg.bad { color: #D63A3A; }
+@keyframes dev-no { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-5px); } 40%,80% { transform: translateX(5px); } }
+#dev-pass.no { animation: dev-no .32s linear; border-color: #D63A3A; }
 #dev-lock {
   width: 100%; padding: 5px; border: 1.5px solid var(--text); border-radius: 8px;
   background: transparent; color: var(--text); font: 700 12.5px 'Nunito', sans-serif; cursor: pointer;
@@ -1221,10 +1234,14 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .35
     <h4>Show in the list</h4>
     <div id="theme-toggle-list"></div>
     <div id="dev-box">
-      <input id="dev-pass" type="password" placeholder="Dev password" autocomplete="off"
-             spellcheck="false" aria-label="Dev password"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();tryDevPassword(this);}">
+      <div id="dev-entry">
+        <input id="dev-pass" type="password" placeholder="Dev password" autocomplete="off"
+               autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Dev password"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();tryDevPassword(this);}">
+        <button id="dev-go" onclick="tryDevPassword(document.getElementById('dev-pass'))">Unlock</button>
+      </div>
       <button id="dev-lock" hidden onclick="lockDev()">🔒 Lock dev tools</button>
+      <div id="dev-msg" aria-live="polite"></div>
     </div>
     <button class="theme-done" onclick="toggleThemeSettings(false)">Done</button>
   </div>
@@ -5508,6 +5525,7 @@ function toggleThemeSettings(force){
   const open = force === undefined ? box.hidden : force;
   box.hidden = !open;
   if (open) renderThemeToggles();
+  if (open && typeof devSay === 'function') devSay('');
 }
 
 /* clicking anywhere else closes the panel */
@@ -5771,37 +5789,68 @@ const sakuraDrift = [];                       // fallen petals, kept across redr
 const SAKURA_DRIFT_MAX = 420;
 const SAKURA_PETAL_COLOURS = ['#FFA8C4', '#FF8FB4', '#FFC2D6', '#FFFFFF', '#FFD9E6', '#F77FA8'];
 
-/* test tool: play the whole day in 20 seconds, hold on night, then ease back
-   to wherever the real clock is */
-let sakuraDemo = null;
-const SAKURA_DEMO_MS = 20000;
-function fastForwardSakuraDay(){
-  if(sakuraDemo) clearInterval(sakuraDemo.timer);
-  document.body.classList.add('sakura-ff');
-  sakuraDemo = { t0: Date.now(), lastPetals: 0 };
-  sakuraDemo.timer = setInterval(() => {
-    const d = sakuraDemo, el = Date.now() - d.t0;
-    if(el - d.lastPetals > 1500 && el < SAKURA_DEMO_MS){ d.lastPetals = el; addSakuraPetals(6); }
-    if(el > SAKURA_DEMO_MS + 4000){                     // held on night; hand back
-      clearInterval(d.timer);
-      sakuraDemo = null;
-      document.body.classList.remove('sakura-ff');
-    }
-    applySakuraTime();
-  }, 200);
-  applySakuraTime();
+/* The clock is a position in the day, p, that is stepped forward rather
+   than read off a start time, so it can be sped up and slowed back down
+   without jumping. 0 → 1 is day into night; in real play the night then
+   stays. 1 → SAKURA_CYCLE is night back round to morning, which only the
+   fast-forward reaches, so held long enough it loops day after day. */
+const SAKURA_CYCLE = 1.25;
+const SAKURA_FF_MS = 20000;                   // one whole day and night while held
+let sakuraP = 0, sakuraLastTick = 0, sakuraFF = null;
+
+function stepSakuraClock(){
+  const now = Date.now();
+  const dt = sakuraLastTick ? Math.max(0, now - sakuraLastTick) : 0;
+  sakuraLastTick = now;
+  if(!sakuraClockStart) return;
+  const perMs = sakuraFF ? SAKURA_CYCLE / SAKURA_FF_MS : 1 / SAKURA_DAY_MS;
+  let p = sakuraP + dt * perMs;
+  if(!sakuraFF && sakuraP <= 1) p = Math.min(p, 1);      // real time: night falls and stays
+  if(p >= SAKURA_CYCLE) p -= SAKURA_CYCLE;               // morning again
+  sakuraP = p;
 }
 
-function sakuraPhase(){
-  if(sakuraDemo) return Math.min(1, (Date.now() - sakuraDemo.t0) / SAKURA_DEMO_MS);
-  if(!sakuraClockStart) return 0;
-  return Math.min(1, (Date.now() - sakuraClockStart) / SAKURA_DAY_MS);
+function sakuraPhase(){ return sakuraP; }
+
+/* test tool: time runs fast only while the button is held down */
+function sakuraHold(on){
+  if(on){
+    if(sakuraFF) return;
+    if(!sakuraClockStart) sakuraClockStart = Date.now();
+    stepSakuraClock();                         // bank the real time up to now first
+    document.body.classList.add('sakura-ff');
+    sakuraFF = { lastPetals: Date.now() };
+    sakuraFF.timer = setInterval(() => {
+      if(Date.now() - sakuraFF.lastPetals > 1500){ sakuraFF.lastPetals = Date.now(); addSakuraPetals(6); }
+      applySakuraTime();
+    }, 100);
+    applySakuraTime();
+  } else {
+    if(!sakuraFF) return;
+    stepSakuraClock();                         // the last stretch still counts as fast
+    clearInterval(sakuraFF.timer);
+    sakuraFF = null;
+    document.body.classList.remove('sakura-ff');
+    applySakuraTime();
+  }
 }
 
 /* how strongly each light is showing at a point in the day */
 function sakuraLight(p){
   const bump = (a, b, c) => p <= a || p >= c ? 0 : p < b ? (p - a) / (b - a) : (c - p) / (c - b);
   const rise = (a, b) => p <= a ? 0 : p >= b ? 1 : (p - a) / (b - a);
+  if(p > 1){
+    /* night back round to morning: the lanterns go out first, then the
+       dark lifts through a pink dawn and a little gold into plain day */
+    const u = (p - 1) / (SAKURA_CYCLE - 1);
+    const b = (a, m, c) => u <= a || u >= c ? 0 : u < m ? (u - a) / (m - a) : (c - u) / (c - m);
+    return {
+      golden:  0.7 * b(0.40, 0.70, 1.00),
+      dusk:    0.8 * b(0.10, 0.40, 0.75),
+      night:   Math.max(0, 1 - u / 0.6),
+      lantern: Math.max(0, 1 - u / 0.3)
+    };
+  }
   return {
     golden:  bump(0.30, 0.48, 0.66),
     dusk:    bump(0.50, 0.68, 0.86),
@@ -5908,6 +5957,7 @@ function addSakuraPetals(count){
 function applySakuraTime(){
   const host = document.getElementById('canopy');
   if(!host || !host.querySelector('.tint-night')) return;
+  stepSakuraClock();
   const L = sakuraLight(sakuraPhase());
   const set = (sel, v) => { const el = host.querySelector(sel); if(el) el.style.opacity = v.toFixed(3); };
   set('.tint-golden', L.golden);
@@ -9224,8 +9274,8 @@ addEventListener('scroll', () => {
    the source shows nothing to copy. A wrong password simply fails to
    decrypt and nothing happens. Once unlocked, the derived key (never the
    password) is remembered in this browser until "Lock dev tools". */
-const DEV_LOCKED = { s: '652PfDt+LgaELXmLriv0lQ==', i: 'D67eisqikmZIXvpU', n: 250000,
-  c: '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' };
+const DEV_LOCKED = { s: '652PfDt+LgaELXmLriv0lQ==', i: 'ljsaz9GByJoR66n4', n: 250000,
+  c: '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' };
 const DEV_KEY_STORE = 'balloonBash_devKey';
 let devOpen = false;
 const devBytes = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
@@ -9240,21 +9290,46 @@ async function devOpenWith(key){
   syncDevStrip();
 }
 
+function devSay(text, kind){
+  const m = document.getElementById('dev-msg');
+  if(!m) return;
+  m.textContent = text;
+  m.className = kind || '';
+}
+
 async function tryDevPassword(input){
-  const pass = input.value;
-  input.value = '';
-  if(!pass || devOpen || !(window.crypto && crypto.subtle) || !DEV_LOCKED.c) return;
+  const pass = input.value.trim();
+  if(!pass || devOpen) return;
+  if(!(window.crypto && crypto.subtle) || !DEV_LOCKED.c){
+    devSay('✗ Dev tools need the https site or localhost, not a file opened from disk.', 'bad');
+    return;
+  }
+  devSay('Checking…');
   try{
     const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
     const key = await crypto.subtle.deriveKey(
       { name: 'PBKDF2', salt: devBytes(DEV_LOCKED.s), iterations: DEV_LOCKED.n, hash: 'SHA-256' },
       base, { name: 'AES-GCM', length: 256 }, true, ['decrypt']);
     await devOpenWith(key);
+    input.value = '';
     try{
       const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key));
       localStorage.setItem(DEV_KEY_STORE, btoa(String.fromCharCode(...raw)));
     }catch(e){}
-  }catch(e){ /* not the password: nothing to see */ }
+    devSay(devHasToolsHere()
+      ? '✓ Dev tools unlocked, bottom-left of the screen.'
+      : '✓ Dev tools unlocked. This theme has no tools yet; switch theme to see them.', 'ok');
+  }catch(e){
+    /* the decrypt failed its authentication check: wrong password */
+    devSay('✗ Wrong password.', 'bad');
+    input.classList.remove('no'); void input.offsetWidth; input.classList.add('no');
+    input.select();
+  }
+}
+
+function devHasToolsHere(){
+  const theme = document.body.getAttribute('data-theme');
+  return [...document.querySelectorAll('#dev-strip [data-for]')].some(b => b.dataset.for === theme);
 }
 
 async function restoreDevTools(){
@@ -9272,6 +9347,7 @@ function lockDev(){
   document.getElementById('dev-strip').innerHTML = '';
   devOpen = false;
   syncDevStrip();
+  devSay('Dev tools locked.');
 }
 
 /* show only the current theme's buttons, and the strip only if it has any */
@@ -9286,7 +9362,7 @@ function syncDevStrip(){
     });
     strip.hidden = !(devOpen && any);
   }
-  const pass = document.getElementById('dev-pass'), lock = document.getElementById('dev-lock');
+  const pass = document.getElementById('dev-entry'), lock = document.getElementById('dev-lock');
   if(pass) pass.hidden = devOpen;
   if(lock) lock.hidden = !devOpen;
 }
