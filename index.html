@@ -1003,12 +1003,12 @@ body.red-alert .canopy .win:nth-of-type(5n){fill:#FF3A1F;}
 body.red-alert .canopy .wl1, body.red-alert .canopy .wl3{opacity:0;}
 
 /* ── gimmick test strip ───────────────────────────────────────────── */
-.gimmick-test{position:fixed;left:12px;bottom:12px;z-index:1500;display:none;align-items:center;gap:8px;
+.gimmick-test{position:fixed;left:12px;bottom:12px;z-index:1500;display:flex;align-items:center;gap:8px;
   padding:5px 9px;border-radius:12px;background:rgba(0,0,0,.5);border:1px dashed rgba(255,255,255,.4);}
 .gimmick-test-label{font:800 9px/1 'Nunito',sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.7);}
-.gimmick-test .btn{margin:0;padding:6px 12px;font-size:13px;display:none;}
-body[data-theme="sakura"] .gimmick-test:has([data-for="sakura"]),
-body[data-theme="sakura"] .gimmick-test [data-for="sakura"]{display:flex;}
+.gimmick-test .btn{margin:0;padding:6px 12px;font-size:13px;}
+/* .btn sets display, which would beat the browser's own [hidden] rule */
+.gimmick-test[hidden], .gimmick-test .btn[hidden]{display:none;}
 /* while fast-forwarding, the light changes quickly instead of over 5s */
 body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .35s linear;}
 
@@ -1167,6 +1167,18 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .35
 /* the theme you're wearing can't be hidden out from under you */
 #theme-settings label.current { opacity: 0.55; cursor: default; }
 #theme-settings label.current input { cursor: not-allowed; }
+#dev-box { margin-top: 10px; padding-top: 9px; border-top: 1px dashed currentColor; }
+#dev-box[hidden], #dev-box [hidden] { display: none; }
+#dev-pass {
+  width: 100% !important; height: auto !important; padding: 6px 8px; border-radius: 8px;
+  border: 1.5px solid var(--text); background: transparent; color: var(--text);
+  font: 600 12.5px 'Nunito', sans-serif; cursor: text !important;
+}
+#dev-pass::placeholder { color: var(--text); opacity: .45; }
+#dev-lock {
+  width: 100%; padding: 5px; border: 1.5px solid var(--text); border-radius: 8px;
+  background: transparent; color: var(--text); font: 700 12.5px 'Nunito', sans-serif; cursor: pointer;
+}
 #theme-settings .theme-done {
   width: 100%;
   margin-top: 10px;
@@ -1208,6 +1220,12 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .35
   <div id="theme-settings" hidden>
     <h4>Show in the list</h4>
     <div id="theme-toggle-list"></div>
+    <div id="dev-box">
+      <input id="dev-pass" type="password" placeholder="Dev password" autocomplete="off"
+             spellcheck="false" aria-label="Dev password"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();tryDevPassword(this);}">
+      <button id="dev-lock" hidden onclick="lockDev()">🔒 Lock dev tools</button>
+    </div>
     <button class="theme-done" onclick="toggleThemeSettings(false)">Done</button>
   </div>
 </div>
@@ -1378,14 +1396,8 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .35
   </div>
 </div>
 
-<!-- Gimmick test strip: each theme's gimmick gets a button here to see it
-     in action on demand. Buttons are tagged with data-for="<theme>" and only
-     show on that theme. -->
-<div class="gimmick-test" aria-label="Test tools">
-  <span class="gimmick-test-label">test</span>
-  <button class="btn" data-for="sakura" onclick="fastForwardSakuraDay()"
-          title="Play the whole day, from daylight to lanterns, in 20 seconds">⏩ Fast-forward day</button>
-</div>
+<!-- filled in by the dev tools once unlocked -->
+<div class="gimmick-test" id="dev-strip" hidden></div>
 
 <!-- Scene effects that must sit ON the scenery but UNDER the game panels -->
 <div id="fx-layer" aria-hidden="true"></div>
@@ -5516,6 +5528,7 @@ function changeTheme(themeName) {
   renderThemeSelect();
   renderThemeToggles();
   renderBalloons();
+  syncDevStrip();
 }
 
 // Navigation & Screen Management
@@ -6968,6 +6981,7 @@ function showVictory(){
 
 document.addEventListener('keydown', e=>{
   if(e.ctrlKey || e.metaKey || e.altKey) return;   // Ctrl+R reloads; it must not guess R
+  if(e.target.closest && e.target.closest('input, textarea, select')) return;
   if(document.getElementById('app').style.display !== 'block') return;
   /* #app stays in the document under the end screens, so check for those too */
   if(document.querySelector('.endscreen.show')) return;
@@ -9202,12 +9216,89 @@ addEventListener('scroll', () => {
   scheduleCanopy(450);
 }, { passive:true });
 
+/* ── Dev tools ─────────────────────────────────────────────────────────
+   The toolkit (the per-theme test buttons) ships encrypted: AES-256-GCM,
+   key derived from the password with PBKDF2-HMAC-SHA256, 12-byte IV, the
+   128-bit tag appended to the ciphertext. Neither the password nor the
+   toolkit is anywhere in this file — only the ciphertext below — so viewing
+   the source shows nothing to copy. A wrong password simply fails to
+   decrypt and nothing happens. Once unlocked, the derived key (never the
+   password) is remembered in this browser until "Lock dev tools". */
+const DEV_LOCKED = { s: '652PfDt+LgaELXmLriv0lQ==', i: 'D67eisqikmZIXvpU', n: 250000,
+  c: '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' };
+const DEV_KEY_STORE = 'balloonBash_devKey';
+let devOpen = false;
+const devBytes = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
+
+async function devOpenWith(key){
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: devBytes(DEV_LOCKED.i) },
+                                         key, devBytes(DEV_LOCKED.c));
+  const strip = document.getElementById('dev-strip');
+  strip.innerHTML = '';
+  (new Function('strip', new TextDecoder().decode(pt)))(strip);
+  devOpen = true;
+  syncDevStrip();
+}
+
+async function tryDevPassword(input){
+  const pass = input.value;
+  input.value = '';
+  if(!pass || devOpen || !(window.crypto && crypto.subtle) || !DEV_LOCKED.c) return;
+  try{
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: devBytes(DEV_LOCKED.s), iterations: DEV_LOCKED.n, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, true, ['decrypt']);
+    await devOpenWith(key);
+    try{
+      const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key));
+      localStorage.setItem(DEV_KEY_STORE, btoa(String.fromCharCode(...raw)));
+    }catch(e){}
+  }catch(e){ /* not the password: nothing to see */ }
+}
+
+async function restoreDevTools(){
+  let k = null;
+  try{ k = localStorage.getItem(DEV_KEY_STORE); }catch(e){}
+  if(!k || !(window.crypto && crypto.subtle) || !DEV_LOCKED.c) return;
+  try{
+    const key = await crypto.subtle.importKey('raw', devBytes(k), 'AES-GCM', false, ['decrypt']);
+    await devOpenWith(key);
+  }catch(e){ try{ localStorage.removeItem(DEV_KEY_STORE); }catch(_){} }
+}
+
+function lockDev(){
+  try{ localStorage.removeItem(DEV_KEY_STORE); }catch(e){}
+  document.getElementById('dev-strip').innerHTML = '';
+  devOpen = false;
+  syncDevStrip();
+}
+
+/* show only the current theme's buttons, and the strip only if it has any */
+function syncDevStrip(){
+  const strip = document.getElementById('dev-strip');
+  if(strip){
+    const theme = document.body.getAttribute('data-theme');
+    let any = false;
+    strip.querySelectorAll('[data-for]').forEach(b => {
+      b.hidden = b.dataset.for !== theme;
+      if(!b.hidden) any = true;
+    });
+    strip.hidden = !(devOpen && any);
+  }
+  const pass = document.getElementById('dev-pass'), lock = document.getElementById('dev-lock');
+  if(pass) pass.hidden = devOpen;
+  if(lock) lock.hidden = !devOpen;
+}
+
 // Initialize on load
 loadProgress();
 renderThemeSelect();
 renderSubjectButtons();
 drawCanopy();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => scheduleCanopy(60));
+syncDevStrip();
+restoreDevTools();
 
 </script>
 </body>
