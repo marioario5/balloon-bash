@@ -5908,6 +5908,8 @@ const SAKURA_PETAL_COLOURS = ['#FFA8C4', '#FF8FB4', '#FFC2D6', '#FFFFFF', '#FFD9
    fast-forward reaches, so held long enough it loops day after day. */
 const SAKURA_CYCLE = 1.25;
 const SAKURA_FF_MS = 20000;                   // one whole day and night while held
+const SAKURA_GOLDEN_AT = 0.30;                // where golden hour starts in sakuraLight
+const SAKURA_DAYLIGHT_MS = 60 * 1000;         // real time from the start of day to golden hour
 let sakuraP = 0, sakuraLastTick = 0, sakuraFF = null;
 
 function stepSakuraClock(){
@@ -5915,7 +5917,11 @@ function stepSakuraClock(){
   const dt = sakuraLastTick ? Math.max(0, now - sakuraLastTick) : 0;
   sakuraLastTick = now;
   if(!sakuraClockStart) return;
-  const perMs = sakuraFF ? SAKURA_CYCLE / SAKURA_FF_MS : 1 / SAKURA_DAY_MS;
+  /* plain daylight (up to where golden hour begins, p = 0.30) is kept short:
+     one minute, then the rest of the day runs at its normal pace */
+  const perMs = sakuraFF ? SAKURA_CYCLE / SAKURA_FF_MS
+              : sakuraP < SAKURA_GOLDEN_AT ? SAKURA_GOLDEN_AT / SAKURA_DAYLIGHT_MS
+              : 1 / SAKURA_DAY_MS;
   let p = sakuraP + dt * perMs;
   if(!sakuraFF && sakuraP <= 1) p = Math.min(p, 1);      // real time: night falls and stays
   if(p >= SAKURA_CYCLE) p -= SAKURA_CYCLE;               // morning again
