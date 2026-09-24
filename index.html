@@ -1080,7 +1080,7 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .2s
 /* the night and the lantern light are canvases, painted in buildSakuraDay */
 canvas.sky-tint{width:100%;height:100%;}
 .lantern-light{position:absolute;inset:0;pointer-events:none;opacity:0;will-change:opacity;transition:opacity 5s linear;}
-.lantern-light canvas{position:absolute;inset:0;width:100%;height:100%;will-change:opacity;
+.lantern-light > svg{position:absolute;inset:0;width:100%;height:100%;will-change:opacity;
   animation:lan-flicker 3.4s ease-in-out infinite;}
 @keyframes lan-flicker{0%,100%{opacity:1;}22%{opacity:.86;}40%{opacity:.97;}57%{opacity:.8;}76%{opacity:.94;}}
 body.sakura-ff .lantern-light{transition:opacity .2s linear;}
@@ -5994,37 +5994,58 @@ function buildSakuraDay(host, W, H){
   const night = canvas('sky-tint tint-night');
   const nc = night.getContext('2d');
   const sky = nc.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, 'rgba(2,3,9,0.95)');
-  sky.addColorStop(0.6, 'rgba(4,4,11,0.93)');
-  sky.addColorStop(1, 'rgba(8,5,12,0.9)');
+  sky.addColorStop(0, 'rgba(3,8,30,0.95)');
+  sky.addColorStop(0.6, 'rgba(4,10,34,0.93)');
+  sky.addColorStop(1, 'rgba(5,10,30,0.92)');
   nc.fillStyle = sky; nc.fillRect(0, 0, W, H);
-  nc.globalCompositeOperation = 'destination-out';
-  lamps.forEach(({ x, y, r }) => {
-    const R = r * 7.5;
-    const h = nc.createRadialGradient(x, y, 0, x, y, R);
-    h.addColorStop(0, 'rgba(0,0,0,0.9)');
-    h.addColorStop(0.35, 'rgba(0,0,0,0.45)');
-    h.addColorStop(1, 'rgba(0,0,0,0)');
-    nc.fillStyle = h; nc.fillRect(x - R, y - R, R * 2, R * 2);
-  });
   host.appendChild(night);
 
-  /* the warm light they throw on the blossoms (flickers like a flame) */
+  /* The warm light the lanterns throw. Not a glow in the air: a copy of the
+     scene's own trees and blossoms, recoloured as if lit by lantern light and
+     masked to fall off with distance from each lantern. So light only ever
+     lands on things — the bark, branches and flowers nearest a lantern — and
+     the air between stays dark. Drawn once; it only fades and flickers. */
   const glowWrap = document.createElement('div');
   glowWrap.className = 'lantern-light';
-  const glow = canvas('');
-  const gc = glow.getContext('2d');
-  gc.globalCompositeOperation = 'lighter';
-  lamps.forEach(({ x, y, r }) => {
-    const R = r * 7;
-    const h = gc.createRadialGradient(x, y, 0, x, y, R);
-    h.addColorStop(0, 'rgba(255,232,195,0.42)');
-    h.addColorStop(0.25, 'rgba(255,170,115,0.16)');
-    h.addColorStop(0.6, 'rgba(240,110,95,0.05)');
-    h.addColorStop(1, 'rgba(235,95,80,0)');
-    gc.fillStyle = h; gc.fillRect(x - R, y - R, R * 2, R * 2);
-  });
-  glowWrap.appendChild(glow);
+  const scene = [...host.children].find(c => c.tagName.toLowerCase() === 'svg' && !c.getAttribute('class'));
+  if(scene){
+    const lit = document.createElementNS(NS, 'svg');
+    lit.setAttribute('viewBox', scene.getAttribute('viewBox') || `0 0 ${W} ${H}`);
+    lit.setAttribute('preserveAspectRatio', scene.getAttribute('preserveAspectRatio') || 'none');
+    const defsLit = document.createElementNS(NS, 'defs');
+    defsLit.innerHTML =
+      /* lantern light on a surface: warm, strongest in the reds, but the
+         blossoms keep their pink so it still reads as the same grove; bark
+         goes a lit red-brown */
+      '<filter id="lanternLit" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="' +
+        '0.95 0.20 0.10 0 0.02  0.30 0.30 0.08 0 0.01  0.30 0.14 0.40 0 0  0 0 0 1 0"/></filter>' +
+      '<radialGradient id="litFall"><stop offset="0" stop-color="#fff" stop-opacity="1"/>' +
+        '<stop offset=".35" stop-color="#fff" stop-opacity=".62"/><stop offset=".7" stop-color="#fff" stop-opacity=".18"/>' +
+        '<stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>' +
+      '<mask id="litNear" maskUnits="userSpaceOnUse" x="0" y="0" width="' + W + '" height="' + H + '">' +
+        lamps.map(({ x, y, r }) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r * 9).toFixed(1)}" fill="url(#litFall)"/>`).join('') +
+      '</mask>';
+    lit.appendChild(defsLit);
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('mask', 'url(#litNear)');
+    const inner = document.createElementNS(NS, 'g');
+    inner.setAttribute('filter', 'url(#lanternLit)');
+    /* only solid things catch the light: the sky, mist and soft atmospheric
+       glows are left out, or the air itself would light up */
+    const skip = [];
+    scene.querySelectorAll(':scope > g rect, :scope > g path, :scope > g ellipse, :scope > g circle').forEach(e => {
+      const f = e.getAttribute('fill') || '';
+      let big = false;
+      if(e.tagName !== 'path' || f.startsWith('url(')){ try{ const b = e.getBBox(); big = b.width * b.height > W * H * 0.06; }catch(_){} }
+      if(big || f.startsWith('url(#glow')){ e.setAttribute('data-nolit', ''); skip.push(e); }
+    });
+    [...scene.children].forEach(ch => { if(ch.tagName.toLowerCase() !== 'defs') inner.appendChild(ch.cloneNode(true)); });
+    inner.querySelectorAll('[data-nolit]').forEach(e => e.remove());
+    skip.forEach(e => e.removeAttribute('data-nolit'));
+    g.appendChild(inner);
+    lit.appendChild(g);
+    glowWrap.appendChild(lit);
+  }
   host.appendChild(glowWrap);
 
   /* the lanterns themselves: paper lit from inside, near-white at the heart */
@@ -6049,7 +6070,7 @@ function buildSakuraDay(host, W, H){
     const g = document.createElementNS(NS, 'g');
     g.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
     g.innerHTML =
-      `<circle r="${r * 3.6}" fill="url(#lanGlow)"/>` +
+      `<circle r="${r * 1.9}" fill="url(#lanGlow)"/>` +
       `<line x1="0" y1="${-r * 1.9}" x2="0" y2="${-r * 1.2}" stroke="#3A2A24" stroke-width="1.2"/>` +
       `<rect x="${-r * 0.55}" y="${-r * 1.28}" width="${r * 1.1}" height="${r * 0.3}" rx="1" fill="#2B1E1A"/>` +
       `<ellipse rx="${r * 0.82}" ry="${r}" fill="url(#lanBody)"/>` +
