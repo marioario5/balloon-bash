@@ -1108,10 +1108,14 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .2s
   transition:opacity 5s linear;}
 .tint-golden{background:radial-gradient(70% 55% at 50% 72%, rgba(255,190,110,.30), transparent 72%),
   linear-gradient(180deg, rgba(255,176,96,.22) 0%, rgba(255,150,70,.38) 60%, rgba(240,120,60,.42) 100%);}
-.tint-dusk{background:linear-gradient(180deg, rgba(92,58,140,.34) 0%, rgba(170,82,140,.28) 55%, rgba(255,120,110,.24) 100%);}
-.tint-night{background:
-  radial-gradient(60% 45% at 50% 6%, rgba(190,210,255,.16), transparent 70%),
-  linear-gradient(180deg, rgba(10,14,46,.62) 0%, rgba(34,20,60,.46) 55%, rgba(18,12,36,.6) 100%);}
+.tint-dusk{background:linear-gradient(180deg, rgba(8,34,175,.86) 0%, rgba(12,38,160,.78) 55%, rgba(14,24,105,.74) 100%);}
+/* the night and the lantern light are canvases, painted in buildSakuraDay */
+canvas.sky-tint{width:100%;height:100%;}
+.lantern-light{position:absolute;inset:0;pointer-events:none;opacity:0;will-change:opacity;transition:opacity 5s linear;}
+.lantern-light canvas{position:absolute;inset:0;width:100%;height:100%;will-change:opacity;
+  animation:lan-flicker 3.4s ease-in-out infinite;}
+@keyframes lan-flicker{0%,100%{opacity:1;}22%{opacity:.86;}40%{opacity:.97;}57%{opacity:.8;}76%{opacity:.94;}}
+body.sakura-ff .lantern-light{transition:opacity .2s linear;}
 .sakura-drift{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;will-change:transform;}
 .sakura-lanterns{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;
   will-change:opacity;transition:opacity 5s linear;}
@@ -5970,10 +5974,10 @@ function sakuraLight(p){
     };
   }
   return {
-    golden:  bump(0.30, 0.48, 0.66),
-    dusk:    bump(0.50, 0.68, 0.86),
-    night:   rise(0.70, 0.92),
-    lantern: rise(0.78, 0.95)
+    golden:  bump(0.30, 0.40, 0.52),
+    dusk:    bump(0.44, 0.52, 0.60),     // blue hour is brief
+    night:   rise(0.54, 0.64),
+    lantern: rise(0.56, 0.66)
   };
 }
 
@@ -5990,47 +5994,109 @@ function buildSakuraDay(host, W, H){
   sakuraDrift.forEach(p => drift.appendChild(driftPetalNode(p, W, H)));
   layer('tint-golden');
   layer('tint-dusk');
-  layer('tint-night');
 
-  /* yozakura: two strings of paper lanterns sagging across the corners */
+  /* Yozakura, after photographs of the Meguro River at night: the sky and
+     everything away from the lights go almost black, and the paper lanterns
+     carve warm pools out of the dark, the blossoms nearest them glowing
+     pale. Two canvases, each painted once per draw and only ever faded:
+     the dark, with soft holes cut where the lanterns are, and the warm
+     light those lanterns throw, added on top. */
+  const lamps = [];
+  const reach = Math.min(W * 0.34, 420);
+  const strings = [
+    [-20, H * 0.09, reach, H * 0.2, 1],
+    [W + 20, H * 0.09, W - reach, H * 0.2, 1],
+    [-20, H * 0.30, reach * 0.78, H * 0.37, 0.85],       // a lower row, as the river's lanterns run in rows
+    [W + 20, H * 0.30, W - reach * 0.78, H * 0.37, 0.85]
+  ];
+  const cords = [];
+  strings.forEach(([x0, y0, x1, y1, size]) => {
+    const sag = H * 0.07 * size;
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2 + sag;
+    const at = u => [(1 - u) * (1 - u) * x0 + 2 * (1 - u) * u * mx + u * u * x1,
+                     (1 - u) * (1 - u) * y0 + 2 * (1 - u) * u * my + u * u * y1];
+    cords.push(`M ${x0} ${y0} Q ${mx} ${my} ${x1} ${y1}`);
+    const n = Math.max(3, Math.round(reach * size / 80));
+    for(let k = 1; k <= n; k++){
+      const [x, y] = at(k / (n + 0.6));
+      lamps.push({ x, y: y + 10, r: (13 + (k % 2) * 3) * size });
+    }
+  });
+
+  const canvas = cls => {
+    const cv = document.createElement('canvas');
+    cv.className = cls;
+    cv.width = Math.max(1, Math.round(W)); cv.height = Math.max(1, Math.round(H));
+    return cv;
+  };
+  /* the dark */
+  const night = canvas('sky-tint tint-night');
+  const nc = night.getContext('2d');
+  const sky = nc.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, 'rgba(2,3,9,0.95)');
+  sky.addColorStop(0.6, 'rgba(4,4,11,0.93)');
+  sky.addColorStop(1, 'rgba(8,5,12,0.9)');
+  nc.fillStyle = sky; nc.fillRect(0, 0, W, H);
+  nc.globalCompositeOperation = 'destination-out';
+  lamps.forEach(({ x, y, r }) => {
+    const R = r * 7.5;
+    const h = nc.createRadialGradient(x, y, 0, x, y, R);
+    h.addColorStop(0, 'rgba(0,0,0,0.9)');
+    h.addColorStop(0.35, 'rgba(0,0,0,0.45)');
+    h.addColorStop(1, 'rgba(0,0,0,0)');
+    nc.fillStyle = h; nc.fillRect(x - R, y - R, R * 2, R * 2);
+  });
+  host.appendChild(night);
+
+  /* the warm light they throw on the blossoms (flickers like a flame) */
+  const glowWrap = document.createElement('div');
+  glowWrap.className = 'lantern-light';
+  const glow = canvas('');
+  const gc = glow.getContext('2d');
+  gc.globalCompositeOperation = 'lighter';
+  lamps.forEach(({ x, y, r }) => {
+    const R = r * 7;
+    const h = gc.createRadialGradient(x, y, 0, x, y, R);
+    h.addColorStop(0, 'rgba(255,232,195,0.42)');
+    h.addColorStop(0.25, 'rgba(255,170,115,0.16)');
+    h.addColorStop(0.6, 'rgba(240,110,95,0.05)');
+    h.addColorStop(1, 'rgba(235,95,80,0)');
+    gc.fillStyle = h; gc.fillRect(x - R, y - R, R * 2, R * 2);
+  });
+  glowWrap.appendChild(glow);
+  host.appendChild(glowWrap);
+
+  /* the lanterns themselves: paper lit from inside, near-white at the heart */
   const lan = document.createElementNS(NS, 'svg');
   lan.setAttribute('class', 'sakura-lanterns');
   lan.setAttribute('viewBox', `0 0 ${W} ${H}`);
   lan.setAttribute('preserveAspectRatio', 'none');
   const defsL = document.createElementNS(NS, 'defs');
   defsL.innerHTML =
-    '<radialGradient id="lanGlow"><stop offset="0" stop-color="#FFD58A" stop-opacity=".55"/>' +
-    '<stop offset=".45" stop-color="#FF9E5A" stop-opacity=".18"/><stop offset="1" stop-color="#FF9E5A" stop-opacity="0"/></radialGradient>' +
-    '<linearGradient id="lanBody" x1="0" x2="1"><stop offset="0" stop-color="#E8563B"/>' +
-    '<stop offset=".45" stop-color="#FFB37A"/><stop offset="1" stop-color="#C73A28"/></linearGradient>';
+    '<radialGradient id="lanGlow"><stop offset="0" stop-color="#FFE3B0" stop-opacity=".8"/>' +
+    '<stop offset=".3" stop-color="#FFA868" stop-opacity=".32"/><stop offset="1" stop-color="#FF8A5A" stop-opacity="0"/></radialGradient>' +
+    '<radialGradient id="lanBody" cx=".5" cy=".45" r=".6"><stop offset="0" stop-color="#FFF6E2"/>' +
+    '<stop offset=".45" stop-color="#FFD29A"/><stop offset=".8" stop-color="#FF8A5C"/><stop offset="1" stop-color="#D8453A"/></radialGradient>';
   lan.appendChild(defsL);
-  const reach = Math.min(W * 0.34, 420);
-  [[-20, H * 0.09, reach, H * 0.2], [W + 20, H * 0.09, W - reach, H * 0.2]].forEach(([x0, y0, x1, y1]) => {
-    const sag = H * 0.07;
-    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2 + sag;
-    const at = u => [(1 - u) * (1 - u) * x0 + 2 * (1 - u) * u * mx + u * u * x1,
-                     (1 - u) * (1 - u) * y0 + 2 * (1 - u) * u * my + u * u * y1];
+  cords.forEach(d => {
     const cord = document.createElementNS(NS, 'path');
-    cord.setAttribute('d', `M ${x0} ${y0} Q ${mx} ${my} ${x1} ${y1}`);
+    cord.setAttribute('d', d);
     cord.setAttribute('class', 'lan-cord');
     lan.appendChild(cord);
-    const n = Math.max(3, Math.round(reach / 85));
-    for(let k = 1; k <= n; k++){
-      const [x, y] = at(k / (n + 0.6));
-      const r = 13 + (k % 2) * 3;
-      const g = document.createElementNS(NS, 'g');
-      g.setAttribute('transform', `translate(${x.toFixed(1)} ${(y + 10).toFixed(1)})`);
-      g.innerHTML =
-        `<circle r="${r * 4.2}" fill="url(#lanGlow)"/>` +
-        `<line x1="0" y1="${-r * 1.9}" x2="0" y2="${-r * 1.2}" stroke="#3A2A24" stroke-width="1.2"/>` +
-        `<rect x="${-r * 0.55}" y="${-r * 1.28}" width="${r * 1.1}" height="${r * 0.3}" rx="1" fill="#2B1E1A"/>` +
-        `<ellipse rx="${r * 0.82}" ry="${r}" fill="url(#lanBody)"/>` +
-        `<path d="M ${-r * 0.8} ${-r * 0.35} Q 0 ${-r * 0.5} ${r * 0.8} ${-r * 0.35} M ${-r * 0.82} 0 L ${r * 0.82} 0 ` +
-        `M ${-r * 0.8} ${r * 0.35} Q 0 ${r * 0.5} ${r * 0.8} ${r * 0.35}" stroke="#9C2A1C" stroke-opacity=".5" stroke-width="0.9" fill="none"/>` +
-        `<rect x="${-r * 0.55}" y="${r * 0.98}" width="${r * 1.1}" height="${r * 0.28}" rx="1" fill="#2B1E1A"/>` +
-        `<line x1="0" y1="${r * 1.26}" x2="0" y2="${r * 1.9}" stroke="#E8563B" stroke-width="1.4"/>`;
-      lan.appendChild(g);
-    }
+  });
+  lamps.forEach(({ x, y, r }) => {
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    g.innerHTML =
+      `<circle r="${r * 3.6}" fill="url(#lanGlow)"/>` +
+      `<line x1="0" y1="${-r * 1.9}" x2="0" y2="${-r * 1.2}" stroke="#3A2A24" stroke-width="1.2"/>` +
+      `<rect x="${-r * 0.55}" y="${-r * 1.28}" width="${r * 1.1}" height="${r * 0.3}" rx="1" fill="#2B1E1A"/>` +
+      `<ellipse rx="${r * 0.82}" ry="${r}" fill="url(#lanBody)"/>` +
+      `<path d="M ${-r * 0.8} ${-r * 0.35} Q 0 ${-r * 0.5} ${r * 0.8} ${-r * 0.35} M ${-r * 0.82} 0 L ${r * 0.82} 0 ` +
+      `M ${-r * 0.8} ${r * 0.35} Q 0 ${r * 0.5} ${r * 0.8} ${r * 0.35}" stroke="#C0452F" stroke-opacity=".45" stroke-width="0.9" fill="none"/>` +
+      `<rect x="${-r * 0.55}" y="${r * 0.98}" width="${r * 1.1}" height="${r * 0.28}" rx="1" fill="#2B1E1A"/>` +
+      `<line x1="0" y1="${r * 1.26}" x2="0" y2="${r * 1.9}" stroke="#E8563B" stroke-width="1.4"/>`;
+    lan.appendChild(g);
   });
   host.appendChild(lan);
 
@@ -6082,6 +6148,7 @@ function applySakuraTime(){
   set('.tint-dusk', L.dusk);
   set('.tint-night', L.night);
   set('.sakura-lanterns', L.lantern);
+  set('.lantern-light', L.lantern);
 }
 /* the light is re-read every few seconds; each change is a slow fade */
 setInterval(applySakuraTime, 5000);
