@@ -6,6 +6,7 @@
 <title>AP Balloon Hangman</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..600,0..100,0..1&family=Fredoka+One&family=Jost:wght@300;400;500&family=Nunito:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@900&text=%20.ADEFILORST%E3%82%A3%E3%83%89%E3%83%95%E3%83%AB%E3%83%BC%E5%85%A8%E9%96%8B&display=swap');
 
 *{box-sizing:border-box;margin:0;padding:0}
 
@@ -1002,6 +1003,95 @@ body.red-alert .canopy .win{fill:#D8102A;}
 body.red-alert .canopy .win:nth-of-type(5n){fill:#FF3A1F;}
 body.red-alert .canopy .wl1, body.red-alert .canopy .wl3{opacity:0;}
 
+/* ── theme locked during a run ────────────────────────────────────── */
+#theme-wrap.run-locked #theme-select{opacity:.6;cursor:not-allowed !important;}
+#theme-lock-note{display:none;font:700 11.5px/1.35 'Nunito',sans-serif;margin:-2px 0 9px;opacity:.8;}
+#theme-wrap.run-locked #theme-lock-note{display:block;}
+
+/* ── Tokyo-3: the NERV status panel ───────────────────────────────── */
+#nerv-hud{position:fixed;right:15px;top:62px;z-index:5;pointer-events:none;min-width:176px;
+  padding:7px 10px 7px 9px;border-radius:3px;color:#FF8A1F;
+  font:700 11px/1.2 ui-monospace,'Consolas','Menlo',monospace;letter-spacing:2px;
+  background:rgba(6,8,12,.74);border:1px solid rgba(255,138,31,.65);border-left:4px solid #FF8A1F;
+  box-shadow:0 0 18px rgba(255,138,31,.16);}
+#nerv-hud[hidden]{display:none;}
+.nh-row{display:flex;align-items:center;justify-content:space-between;gap:9px;}
+.nh-row + .nh-row{margin-top:6px;}
+.nh-pips{display:flex;gap:4px;}
+.nh-oct{display:block;width:14px;height:14px;background:#FF8A1F;
+  clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);}
+.nh-oct.off{background:rgba(255,138,31,.18);}
+.nh-bar{display:block;width:8px;height:12px;background:rgba(255,138,31,.18);transform:skewX(-14deg);}
+.nh-bar.on{background:#FFC37A;box-shadow:0 0 6px #FF8A1F;}
+.nh-bar.new{animation:nh-new .7s ease-out;}
+@keyframes nh-new{0%{transform:skewX(-14deg) scale(1.9);background:#fff;}100%{transform:skewX(-14deg) scale(1);}}
+.nh-count{min-width:26px;text-align:right;}
+.nh-streak,.nh-hint{display:none;}
+#nerv-hud.damaged .nh-streak{display:flex;}
+#nerv-hud.damaged .nh-hint{display:block;}
+.nh-hint{margin-top:5px;font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,195,122,.85);}
+.nh-lost{animation:nh-blink 1s steps(2) infinite;}
+@keyframes nh-blink{0%{opacity:1;}50%{opacity:.25;}}
+body.red-alert #nerv-hud{color:#FF3A1F;border-color:rgba(255,42,26,.8);border-left-color:#FF2A1A;
+  box-shadow:0 0 18px rgba(255,30,20,.25);}
+body.red-alert .nh-oct.off{background:rgba(255,42,26,.2);}
+/* on a phone the keyboard owns the bottom, so it becomes one slim line
+   along the very top edge, above the buttons */
+@media (max-width:760px){
+  #nerv-hud{top:0;left:0;right:0;min-width:0;display:flex;justify-content:center;gap:14px;
+    padding:2px 10px;border-radius:0;border-width:0 0 1px;border-left:0;font-size:9px;letter-spacing:1.2px;}
+  #nerv-hud .nh-row + .nh-row{margin-top:0;}
+  #nerv-hud .nh-row{gap:6px;}
+  #nerv-hud .nh-hint{display:none !important;}
+  .nh-oct{width:10px;height:10px;}
+  .nh-bar{width:6px;height:9px;}
+}
+
+/* ── Tokyo-3: the field coming back ───────────────────────────────── */
+#restore-layer{position:fixed;inset:0;z-index:400;pointer-events:none;overflow:hidden;}
+.restore-flash{position:absolute;inset:0;opacity:0;will-change:opacity;
+  background:radial-gradient(circle at var(--cx) var(--cy), rgba(255,240,215,.95) 0, rgba(255,150,50,.6) 14%,
+             rgba(255,100,10,.2) 42%, rgba(255,100,10,0) 72%);}
+.restore-wave{position:absolute;overflow:visible;will-change:transform,opacity;}
+.restore-wave .w-outer{fill:none;stroke:#FF8A1F;stroke-width:18;stroke-linejoin:round;}
+.restore-wave .w-inner{fill:none;stroke:#FFE6BE;stroke-width:5;stroke-linejoin:round;}
+/* a ring snapping back into place */
+.field-ring.born{animation:field-born .75s cubic-bezier(.2,1.5,.4,1) both;}
+.field-ring.born polygon{stroke:#FFF1D6;stroke-width:7;}
+@keyframes field-born{0%{opacity:0;transform:scale(1.9);}35%{opacity:1;}100%{opacity:1;transform:scale(1);}}
+
+/* the title card: Evangelion's white heavy serif on black, stretched tall */
+.restore-banner{position:absolute;left:0;right:0;top:50%;height:clamp(200px,36vh,290px);margin-top:calc(clamp(200px,36vh,290px) / -2);
+  display:flex;align-items:center;justify-content:center;}
+.rb-band{position:absolute;inset:0;background:rgba(4,4,6,.9);border-top:2px solid #FF8A1F;border-bottom:2px solid #FF8A1F;
+  box-shadow:0 0 44px rgba(255,138,31,.35);overflow:hidden;will-change:transform,opacity;
+  animation:rb-band 2.9s cubic-bezier(.2,.9,.3,1) both;}
+@keyframes rb-band{0%{transform:scaleY(0);opacity:0;}7%{transform:scaleY(1);opacity:1;}88%{transform:scaleY(1);opacity:1;}100%{transform:scaleY(0);opacity:0;}}
+.rb-scan{position:absolute;top:0;bottom:0;left:0;width:18%;will-change:transform;
+  background:linear-gradient(90deg,rgba(255,190,120,0),rgba(255,200,140,.32),rgba(255,190,120,0));
+  animation:rb-scan 2.9s ease-in-out both;}
+@keyframes rb-scan{0%,6%{transform:translateX(-100%);}34%,100%{transform:translateX(560%);}}
+.rb-text{position:relative;text-align:center;color:#fff;animation:rb-out 2.9s linear both;}
+@keyframes rb-out{0%,86%{opacity:1;}95%,100%{opacity:0;}}
+.rb-kicker{font:700 clamp(10px,1.4vw,13px)/1 ui-monospace,'Consolas','Menlo',monospace;letter-spacing:.35em;color:#FF8A1F;
+  animation:rb-flicker 2.9s steps(1) both;}
+@keyframes rb-flicker{0%{opacity:0;}6%{opacity:1;}11%{opacity:0;}15%{opacity:1;}21%{opacity:.2;}25%,100%{opacity:1;}}
+.rb-title{font:900 clamp(46px,9vw,112px)/.95 'Noto Serif JP','Yu Mincho','Hiragino Mincho ProN','MS PMincho',serif;
+  margin:.16em 0 .1em;transform-origin:50% 60%;text-shadow:0 0 26px rgba(255,138,31,.6);
+  animation:rb-stamp 2.9s cubic-bezier(.2,1.3,.4,1) both;}
+@keyframes rb-stamp{0%,8%{opacity:0;transform:scale(1.5,1.9);}17%{opacity:1;transform:scale(1,1.2);}
+  20%{opacity:.45;}23%,100%{opacity:1;transform:scale(1,1.2);}}
+.rb-sub{font:900 clamp(18px,3vw,34px)/1 'Noto Serif JP','Yu Mincho','Hiragino Mincho ProN','MS PMincho',serif;
+  letter-spacing:.42em;margin-right:-.42em;color:#FFC37A;animation:rb-sub 2.9s ease-out both;}
+@keyframes rb-sub{0%,24%{opacity:0;transform:scaleX(1.35);}34%,100%{opacity:1;transform:scaleX(1);}}
+.rb-foot{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:.7em;animation:rb-sub 2.9s ease-out both;}
+.rb-jp{font:900 clamp(12px,1.6vw,16px)/1 'Noto Serif JP','Yu Mincho','Hiragino Mincho ProN','MS PMincho',serif;letter-spacing:.12em;}
+.rb-pips{display:flex;gap:6px;}
+.rb-pips i{display:block;width:16px;height:16px;background:rgba(255,138,31,.2);
+  clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);}
+.rb-pips i.on{background:#FF8A1F;box-shadow:0 0 10px #FF8A1F;animation:rb-pip .45s ease-out;}
+@keyframes rb-pip{0%{transform:scale(1.8);background:#fff;}100%{transform:scale(1);}}
+
 /* ── gimmick test strip ───────────────────────────────────────────── */
 .gimmick-test{position:fixed;left:12px;bottom:12px;z-index:1500;display:flex;align-items:center;gap:8px;
   padding:5px 9px;border-radius:12px;background:rgba(0,0,0,.5);border:1px dashed rgba(255,255,255,.4);}
@@ -1231,6 +1321,7 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .2s
   <span id="theme-new-badge" title="New theme: Hogwarts">!</span>
 
   <div id="theme-settings" hidden>
+    <div id="theme-lock-note">🔒 The theme is locked until this run ends.</div>
     <h4>Show in the list</h4>
     <div id="theme-toggle-list"></div>
     <div id="dev-box">
@@ -1415,6 +1506,13 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .2s
 
 <!-- filled in by the dev tools once unlocked -->
 <div class="gimmick-test" id="dev-strip" hidden></div>
+
+<!-- Tokyo-3: NERV's read-out of the A.T. Field, shown during a run -->
+<div id="nerv-hud" hidden aria-live="polite">
+  <div class="nh-row"><span class="nh-flabel">A.T. FIELD</span><span class="nh-pips" id="nh-field"></span></div>
+  <div class="nh-row nh-streak"><span>STREAK</span><span class="nh-pips" id="nh-streak"></span><span class="nh-count" id="nh-count"></span></div>
+  <div class="nh-hint">7 in a row restores the field</div>
+</div>
 
 <!-- Scene effects that must sit ON the scenery but UNDER the game panels -->
 <div id="fx-layer" aria-hidden="true"></div>
@@ -5535,7 +5633,20 @@ document.addEventListener('click', e => {
   if (box && !box.hidden && wrap && !wrap.contains(e.target)) box.hidden = true;
 });
 
+/* Each theme plays differently now, so the theme is fixed for a run: it is
+   chosen before you start and unlocks when the run is over. */
+let runLive = false;
+function setRunLive(on){
+  runLive = on;
+  const sel = document.getElementById('theme-select');
+  if (sel){ sel.disabled = on; sel.title = on ? 'The theme is locked until this run ends' : ''; }
+  const wrap = document.getElementById('theme-wrap');
+  if (wrap) wrap.classList.toggle('run-locked', on);
+  syncNervHud();
+}
+
 function changeTheme(themeName) {
+  if (runLive && themeName !== document.body.getAttribute('data-theme')){ renderThemeSelect(); return; }
   document.body.setAttribute('data-theme', themeName);
   // only the Cottage Garden theme carries the hanging greenery
   if (['garden', 'sakura', 'tokyo3', 'winter', 'castle'].includes(themeName)) scheduleCanopy(40);
@@ -5558,6 +5669,7 @@ function hideAllScreens() {
   document.getElementById('app').style.display = 'none';
   document.getElementById('endscreen-gameover').classList.remove('show');
   document.getElementById('endscreen-win').classList.remove('show');
+  setRunLive(false);
   // the greenery's keep-out zones just moved; the caller shows its screen
   // synchronously right after this, so a short debounce catches the new layout
   scheduleCanopy();
@@ -5988,6 +6100,7 @@ function startGame(){
   
   initialPlaylistLength = WORDS.length; // Set max points goal for the meter!
   wordQueue = shuffle(WORDS);
+  setRunLive(true);
   renderBalloons();
   nextRound();
 }
@@ -6098,11 +6211,14 @@ function buildNervField(host, W, H){
   applyFieldVisibility();
 }
 
-function paintNervField(flash){
+/* `count` overrides how many rings are drawn, for the restore show */
+function paintNervField(flash, count){
+  const n = count === undefined ? atField : count;
+  syncNervHud(n);
   const wrap = document.getElementById('nerv-field');
   if(!wrap) return;
   /* the outer rings go first, so what is left is closest to NERV */
-  [...wrap.querySelectorAll('.field-ring')].forEach((s, i) => s.classList.toggle('down', i >= atField));
+  [...wrap.querySelectorAll('.field-ring')].forEach((s, i) => s.classList.toggle('down', i >= n));
   if(flash){ wrap.classList.remove('flare'); void wrap.offsetWidth; wrap.classList.add('flare'); }
 }
 
@@ -6133,14 +6249,147 @@ function setRedAlert(on){
   document.body.classList.toggle('red-alert', on);
 }
 
+const AT_REGEN_STREAK = 7;
+
+/* NERV's panel: the partitions standing and, while any are down, how far
+   the current streak is towards bringing them back */
+function syncNervHud(count){
+  const hud = document.getElementById('nerv-hud');
+  if(!hud) return;
+  const on = runLive && isTokyo3();
+  hud.hidden = !on;
+  if(!on) return;
+  const f = count === undefined ? atField : count;
+  document.getElementById('nh-field').innerHTML =
+    Array.from({ length: AT_MAX }, (_, i) => `<i class="nh-oct${i < f ? '' : ' off'}"></i>`).join('');
+  const label = hud.querySelector('.nh-flabel');
+  label.textContent = f ? 'A.T. FIELD' : 'A.T. FIELD LOST';
+  label.classList.toggle('nh-lost', !f);
+  hud.classList.toggle('damaged', f < AT_MAX);
+  const bars = document.getElementById('nh-streak');
+  const prev = +bars.dataset.n || 0;
+  const streak = fieldRestoring ? AT_REGEN_STREAK : winStreak;     // the streak that paid for it
+  bars.innerHTML = Array.from({ length: AT_REGEN_STREAK }, (_, i) =>
+    `<i class="nh-bar${i < streak ? ' on' : ''}${i === streak - 1 && streak > prev ? ' new' : ''}"></i>`).join('');
+  bars.dataset.n = streak;
+  document.getElementById('nh-count').textContent = streak + '/' + AT_REGEN_STREAK;
+}
+
+/* Returns true if there was anything to restore. */
 function regenerateATField(){
-  if(atField === AT_MAX && !redAlert) return;
+  if(atField === AT_MAX && !redAlert) return false;
+  const from = atField;
   atField = AT_MAX;
   atShotsFired = new Set();
   lossesThisField = 0;
-  setRedAlert(false);
-  paintNervField(true);
-  showNervField(5000);
+  if(isTokyo3()) playFieldRestore(from);
+  else { setRedAlert(false); paintNervField(true); showNervField(5000); }
+  return true;
+}
+
+/* ── The field coming back ────────────────────────────────────────────
+   A streak has earned this, so it is loud: the screen flares orange from
+   NERV, and each lost partition snaps back in turn with a shockwave of
+   octagons rolling out across the whole city. The emergency lights give
+   way to the ordinary ones, and a title card in Evangelion's own style
+   says what just happened. The result card waits for all of it.
+   Everything here is its own layer, animated only by opacity/transform. */
+const REGEN_SHOW_MS = 3300;
+let fieldRestoring = false;
+const REGEN_STEP_MS = 380;
+
+function restoreLayer(){
+  let l = document.getElementById('restore-layer');
+  if(!l){ l = document.createElement('div'); l.id = 'restore-layer'; l.setAttribute('aria-hidden', 'true'); document.body.appendChild(l); }
+  return l;
+}
+
+/* where the field is on screen right now (rings are placed in % of the scene) */
+function fieldCentre(){
+  const host = document.getElementById('canopy');
+  const ring = document.querySelector('#nerv-field .field-ring');
+  if(host && ring && ring.style.left){
+    const r = host.getBoundingClientRect();
+    return {
+      x: r.left + (parseFloat(ring.style.left) + parseFloat(ring.style.width) / 2) / 100 * r.width,
+      y: r.top  + (parseFloat(ring.style.top)  + parseFloat(ring.style.height) / 2) / 100 * r.height
+    };
+  }
+  return { x: innerWidth * 0.2, y: innerHeight * 0.78 };
+}
+
+function restoreWave(layer, c){
+  const NS = 'http://www.w3.org/2000/svg';
+  const R = Math.round(Math.max(innerWidth, innerHeight) * 0.8);
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'restore-wave');
+  svg.setAttribute('viewBox', `${-R} ${-R} ${R * 2} ${R * 2}`);
+  svg.style.left = (c.x - R) + 'px'; svg.style.top = (c.y - R) + 'px';
+  svg.style.width = svg.style.height = (R * 2) + 'px';
+  svg.innerHTML = `<polygon class="w-outer" points="${octagon(R - 12)}"/><polygon class="w-inner" points="${octagon(R * 0.9)}"/>`;
+  layer.insertBefore(svg, layer.firstChild);          // behind the title card
+  const done = () => svg.remove();
+  svg.animate([
+    { transform: 'scale(.06)', opacity: 1 },
+    { transform: 'scale(.45)', opacity: .9, offset: .4 },
+    { transform: 'scale(1)',   opacity: 0 }
+  ], { duration: 1300, easing: 'cubic-bezier(.15,.7,.35,1)', fill: 'forwards' }).finished.then(done).catch(done);
+  setTimeout(done, 1500);
+}
+
+function playFieldRestore(from){
+  fieldRestoring = true;
+  setTimeout(() => { fieldRestoring = false; syncNervHud(); }, REGEN_SHOW_MS);
+  const layer = restoreLayer();
+  const c = fieldCentre();
+  showNervField(REGEN_SHOW_MS + 8000);
+  paintNervField(false, from);
+
+  /* the flare, centred on NERV */
+  const flash = document.createElement('div');
+  flash.className = 'restore-flash';
+  flash.style.setProperty('--cx', c.x + 'px');
+  flash.style.setProperty('--cy', c.y + 'px');
+  layer.appendChild(flash);
+  flash.animate([{ opacity: 0 }, { opacity: .8, offset: .18 }, { opacity: 0 }],
+                { duration: 900, easing: 'ease-out', fill: 'forwards' });
+  setTimeout(() => flash.remove(), 1000);
+
+  /* the title card */
+  const banner = document.createElement('div');
+  banner.className = 'restore-banner';
+  banner.innerHTML =
+    '<div class="rb-band"><div class="rb-scan"></div></div>' +
+    '<div class="rb-text">' +
+      '<div class="rb-kicker">' + AT_REGEN_STREAK + '-WORD STREAK &nbsp;▸&nbsp; ALL PARTITIONS ONLINE</div>' +
+      '<div class="rb-title">A.T. FIELD</div>' +
+      '<div class="rb-sub">RESTORED</div>' +
+      '<div class="rb-foot"><span class="rb-pips">' +
+        Array.from({ length: AT_MAX }, (_, i) => `<i${i < from ? ' class="on"' : ''}></i>`).join('') +
+      '</span><span class="rb-jp">A.T.フィールド全開</span></div>' +
+    '</div>';
+  layer.appendChild(banner);
+  setTimeout(() => banner.remove(), 3000);
+
+  /* the partitions, one at a time */
+  const wrap = document.getElementById('nerv-field');
+  let step = 0;
+  for(let k = from; k < AT_MAX; k++, step++){
+    setTimeout(() => {
+      paintNervField(false, k + 1);
+      const ring = wrap && wrap.querySelectorAll('.field-ring')[k];
+      if(ring){
+        ring.classList.remove('born'); void ring.offsetWidth; ring.classList.add('born');
+        setTimeout(() => ring.classList.remove('born'), 800);
+      }
+      const pip = banner.querySelectorAll('.rb-pips i')[k];
+      if(pip) pip.classList.add('on');
+      restoreWave(layer, c);
+      cameraHit(0, -1, 0.16);
+    }, 250 + step * REGEN_STEP_MS);
+  }
+  /* and the city comes off emergency power */
+  setTimeout(() => { setRedAlert(false); paintNervField(true); }, 250 + step * REGEN_STEP_MS);
 }
 
 /* The shot: it comes in from high on the right, slow at first and then
@@ -6854,7 +7103,7 @@ function guess(letter){
 function showResult(won, saved){
   if(saved === undefined) saved = triesLeft;
   const overlay = document.getElementById('result-overlay');
-  let howlerFirst = null, shotFirst = false;
+  let howlerFirst = null, shotFirst = false, restoreFirst = false;
   document.getElementById('result-icon').textContent = won ? '🐺' : '😢';
   document.getElementById('result-title').textContent = won ? 'Nice job!' : 'Popped!';
   document.getElementById('result-title').style.color = won ? 'var(--correct)' : 'var(--wrong)';
@@ -6865,7 +7114,8 @@ function showResult(won, saved){
     playHowl();
 
     winStreak++;
-    if(winStreak >= 7){ winStreak = 0; regenerateATField(); }
+    if(winStreak >= AT_REGEN_STREAK){ winStreak = 0; restoreFirst = regenerateATField() && isTokyo3(); }
+    else syncNervHud();
     if(document.body.getAttribute('data-theme') === 'sakura') addSakuraPetals(6);
     balloonsSaved += saved; score += saved*10 + 20;
     const msg = document.getElementById('result-balloons-msg');
@@ -6893,6 +7143,7 @@ function showResult(won, saved){
     runFails.push(currentWordObj);
     roundsLost++;
     winStreak = 0;
+    syncNervHud();
     if(isTokyo3()){
       const shot = atShotForLoss();
       if(shot){ fireAtNerv(shot); shotFirst = true; }
@@ -6914,6 +7165,7 @@ function showResult(won, saved){
 
   if(howlerFirst) sendHowler(howlerFirst, () => overlay.classList.add('show'));
   else if(shotFirst) setTimeout(() => overlay.classList.add('show'), SHOT_MS + 1300);
+  else if(restoreFirst) setTimeout(() => overlay.classList.add('show'), REGEN_SHOW_MS);
   else overlay.classList.add('show');
 }
 
@@ -6988,6 +7240,7 @@ function toggleExportHelp(){
 }
 
 function showGameOver(early){
+  setRunLive(false);
   saveProgress(); // SAVE LOCALLY
   document.getElementById('export-help').classList.remove('show');
   document.getElementById('result-overlay').classList.remove('show');
@@ -7021,6 +7274,7 @@ You'll be ranked on the ${n} word${n === 1 ? '' : 's'} you have finished, not th
 }
 
 function showVictory(){
+  setRunLive(false);
   saveProgress(); // SAVE LOCALLY
   document.getElementById('result-overlay').classList.remove('show');
   document.getElementById('final-score-win').textContent = score;
