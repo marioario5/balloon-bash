@@ -6279,6 +6279,7 @@ function wolfPlace(x){
   wolfX = x;
   w.style.top = wolfGround().y + 'px';
   const m = w.querySelector('.wolf-move');
+  if(!m) return;
   m.getAnimations().forEach(a => a.cancel());
   m.style.transform = `translateX(${x}px)`;
 }
