@@ -1002,6 +1002,30 @@ body.red-alert .canopy .win{fill:#D8102A;}
 body.red-alert .canopy .win:nth-of-type(5n){fill:#FF3A1F;}
 body.red-alert .canopy .wl1, body.red-alert .canopy .wl3{opacity:0;}
 
+/* ── gimmick test strip ───────────────────────────────────────────── */
+.gimmick-test{position:fixed;left:12px;bottom:12px;z-index:1500;display:none;align-items:center;gap:8px;
+  padding:5px 9px;border-radius:12px;background:rgba(0,0,0,.5);border:1px dashed rgba(255,255,255,.4);}
+.gimmick-test-label{font:800 9px/1 'Nunito',sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.7);}
+.gimmick-test .btn{margin:0;padding:6px 12px;font-size:13px;display:none;}
+body[data-theme="sakura"] .gimmick-test:has([data-for="sakura"]),
+body[data-theme="sakura"] .gimmick-test [data-for="sakura"]{display:flex;}
+/* while fast-forwarding, the light changes quickly instead of over 5s */
+body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .35s linear;}
+
+/* ── Cherry Blossom: the day going by ─────────────────────────────── */
+.sky-tint{position:absolute;inset:0;pointer-events:none;opacity:0;will-change:opacity;
+  transition:opacity 5s linear;}
+.tint-golden{background:radial-gradient(70% 55% at 50% 72%, rgba(255,190,110,.30), transparent 72%),
+  linear-gradient(180deg, rgba(255,176,96,.22) 0%, rgba(255,150,70,.38) 60%, rgba(240,120,60,.42) 100%);}
+.tint-dusk{background:linear-gradient(180deg, rgba(92,58,140,.34) 0%, rgba(170,82,140,.28) 55%, rgba(255,120,110,.24) 100%);}
+.tint-night{background:
+  radial-gradient(60% 45% at 50% 6%, rgba(190,210,255,.16), transparent 70%),
+  linear-gradient(180deg, rgba(10,14,46,.62) 0%, rgba(34,20,60,.46) 55%, rgba(18,12,36,.6) 100%);}
+.sakura-drift{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;will-change:transform;}
+.sakura-lanterns{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;
+  will-change:opacity;transition:opacity 5s linear;}
+.lan-cord{fill:none;stroke:#2B1E1A;stroke-width:1.3;stroke-opacity:.8;}
+
 /* Overlays */
 .result-overlay{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);}
 .result-overlay.show{display:flex;}
@@ -1352,6 +1376,15 @@ body.red-alert .canopy .wl1, body.red-alert .canopy .wl3{opacity:0;}
     </div>
     <div class="keyboard" id="keyboard"></div>
   </div>
+</div>
+
+<!-- Gimmick test strip: each theme's gimmick gets a button here to see it
+     in action on demand. Buttons are tagged with data-for="<theme>" and only
+     show on that theme. -->
+<div class="gimmick-test" aria-label="Test tools">
+  <span class="gimmick-test-label">test</span>
+  <button class="btn" data-for="sakura" onclick="fastForwardSakuraDay()"
+          title="Play the whole day, from daylight to lanterns, in 20 seconds">⏩ Fast-forward day</button>
 </div>
 
 <!-- Scene effects that must sit ON the scenery but UNDER the game panels -->
@@ -5708,7 +5741,172 @@ function shuffle(arr){
   return array;
 }
 
+/* ── Cherry Blossom: the day goes by ──────────────────────────────────
+   The longer you study, the later it gets: day, then golden hour, then
+   dusk, then night — yozakura, the grove under paper lanterns. There is
+   no counter and no reward; it is a clock you never have to read. And
+   every word you solve drops a few more petals on the floor, so a long
+   session leaves a visibly deeper carpet.
+
+   None of this touches the grove itself, which is ~13,000 shapes. The
+   light is a stack of tinted layers over it that only ever change
+   opacity, the lanterns are their own layer, and the fallen petals live
+   in a small SVG of their own — so the scene is never redrawn. */
+const SAKURA_DAY_MS = 15 * 60 * 1000;        // a full day, in real play time
+let sakuraClockStart = 0;
+const sakuraDrift = [];                       // fallen petals, kept across redraws
+const SAKURA_DRIFT_MAX = 420;
+const SAKURA_PETAL_COLOURS = ['#FFA8C4', '#FF8FB4', '#FFC2D6', '#FFFFFF', '#FFD9E6', '#F77FA8'];
+
+/* test tool: play the whole day in 20 seconds, hold on night, then ease back
+   to wherever the real clock is */
+let sakuraDemo = null;
+const SAKURA_DEMO_MS = 20000;
+function fastForwardSakuraDay(){
+  if(sakuraDemo) clearInterval(sakuraDemo.timer);
+  document.body.classList.add('sakura-ff');
+  sakuraDemo = { t0: Date.now(), lastPetals: 0 };
+  sakuraDemo.timer = setInterval(() => {
+    const d = sakuraDemo, el = Date.now() - d.t0;
+    if(el - d.lastPetals > 1500 && el < SAKURA_DEMO_MS){ d.lastPetals = el; addSakuraPetals(6); }
+    if(el > SAKURA_DEMO_MS + 4000){                     // held on night; hand back
+      clearInterval(d.timer);
+      sakuraDemo = null;
+      document.body.classList.remove('sakura-ff');
+    }
+    applySakuraTime();
+  }, 200);
+  applySakuraTime();
+}
+
+function sakuraPhase(){
+  if(sakuraDemo) return Math.min(1, (Date.now() - sakuraDemo.t0) / SAKURA_DEMO_MS);
+  if(!sakuraClockStart) return 0;
+  return Math.min(1, (Date.now() - sakuraClockStart) / SAKURA_DAY_MS);
+}
+
+/* how strongly each light is showing at a point in the day */
+function sakuraLight(p){
+  const bump = (a, b, c) => p <= a || p >= c ? 0 : p < b ? (p - a) / (b - a) : (c - p) / (c - b);
+  const rise = (a, b) => p <= a ? 0 : p >= b ? 1 : (p - a) / (b - a);
+  return {
+    golden:  bump(0.30, 0.48, 0.66),
+    dusk:    bump(0.50, 0.68, 0.86),
+    night:   rise(0.70, 0.92),
+    lantern: rise(0.78, 0.95)
+  };
+}
+
+function buildSakuraDay(host, W, H){
+  const NS = 'http://www.w3.org/2000/svg';
+  const layer = cls => { const d = document.createElement('div'); d.className = 'sky-tint ' + cls; host.appendChild(d); return d; };
+  /* the fallen petals: their own little SVG along the floor, under the
+     light so night darkens them with everything else */
+  const drift = document.createElementNS(NS, 'svg');
+  drift.setAttribute('class', 'sakura-drift');
+  drift.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  drift.setAttribute('preserveAspectRatio', 'none');
+  host.appendChild(drift);
+  sakuraDrift.forEach(p => drift.appendChild(driftPetalNode(p, W, H)));
+  layer('tint-golden');
+  layer('tint-dusk');
+  layer('tint-night');
+
+  /* yozakura: two strings of paper lanterns sagging across the corners */
+  const lan = document.createElementNS(NS, 'svg');
+  lan.setAttribute('class', 'sakura-lanterns');
+  lan.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  lan.setAttribute('preserveAspectRatio', 'none');
+  const defsL = document.createElementNS(NS, 'defs');
+  defsL.innerHTML =
+    '<radialGradient id="lanGlow"><stop offset="0" stop-color="#FFD58A" stop-opacity=".55"/>' +
+    '<stop offset=".45" stop-color="#FF9E5A" stop-opacity=".18"/><stop offset="1" stop-color="#FF9E5A" stop-opacity="0"/></radialGradient>' +
+    '<linearGradient id="lanBody" x1="0" x2="1"><stop offset="0" stop-color="#E8563B"/>' +
+    '<stop offset=".45" stop-color="#FFB37A"/><stop offset="1" stop-color="#C73A28"/></linearGradient>';
+  lan.appendChild(defsL);
+  const reach = Math.min(W * 0.34, 420);
+  [[-20, H * 0.09, reach, H * 0.2], [W + 20, H * 0.09, W - reach, H * 0.2]].forEach(([x0, y0, x1, y1]) => {
+    const sag = H * 0.07;
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2 + sag;
+    const at = u => [(1 - u) * (1 - u) * x0 + 2 * (1 - u) * u * mx + u * u * x1,
+                     (1 - u) * (1 - u) * y0 + 2 * (1 - u) * u * my + u * u * y1];
+    const cord = document.createElementNS(NS, 'path');
+    cord.setAttribute('d', `M ${x0} ${y0} Q ${mx} ${my} ${x1} ${y1}`);
+    cord.setAttribute('class', 'lan-cord');
+    lan.appendChild(cord);
+    const n = Math.max(3, Math.round(reach / 85));
+    for(let k = 1; k <= n; k++){
+      const [x, y] = at(k / (n + 0.6));
+      const r = 13 + (k % 2) * 3;
+      const g = document.createElementNS(NS, 'g');
+      g.setAttribute('transform', `translate(${x.toFixed(1)} ${(y + 10).toFixed(1)})`);
+      g.innerHTML =
+        `<circle r="${r * 4.2}" fill="url(#lanGlow)"/>` +
+        `<line x1="0" y1="${-r * 1.9}" x2="0" y2="${-r * 1.2}" stroke="#3A2A24" stroke-width="1.2"/>` +
+        `<rect x="${-r * 0.55}" y="${-r * 1.28}" width="${r * 1.1}" height="${r * 0.3}" rx="1" fill="#2B1E1A"/>` +
+        `<ellipse rx="${r * 0.82}" ry="${r}" fill="url(#lanBody)"/>` +
+        `<path d="M ${-r * 0.8} ${-r * 0.35} Q 0 ${-r * 0.5} ${r * 0.8} ${-r * 0.35} M ${-r * 0.82} 0 L ${r * 0.82} 0 ` +
+        `M ${-r * 0.8} ${r * 0.35} Q 0 ${r * 0.5} ${r * 0.8} ${r * 0.35}" stroke="#9C2A1C" stroke-opacity=".5" stroke-width="0.9" fill="none"/>` +
+        `<rect x="${-r * 0.55}" y="${r * 0.98}" width="${r * 1.1}" height="${r * 0.28}" rx="1" fill="#2B1E1A"/>` +
+        `<line x1="0" y1="${r * 1.26}" x2="0" y2="${r * 1.9}" stroke="#E8563B" stroke-width="1.4"/>`;
+      lan.appendChild(g);
+    }
+  });
+  host.appendChild(lan);
+
+  applySakuraTime();
+}
+
+function driftPetalNode(p, W, H){
+  const n = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  n.setAttribute('d', SAKURA_PETAL);
+  n.setAttribute('fill', p.c);
+  n.setAttribute('opacity', p.o);
+  n.setAttribute('transform', `translate(${(p.x * W).toFixed(1)} ${(H - p.y * H).toFixed(1)}) ` +
+                              `rotate(${p.r}) scale(${p.s} ${(p.s * 0.6).toFixed(2)})`);
+  return n;
+}
+
+/* a solved word lets a few more petals settle, mostly into existing drifts */
+function addSakuraPetals(count){
+  const host = document.getElementById('canopy');
+  const drift = host && host.querySelector('.sakura-drift');
+  const W = drift ? drift.viewBox.baseVal.width : 0, H = drift ? drift.viewBox.baseVal.height : 0;
+  for(let i = 0; i < count; i++){
+    if(sakuraDrift.length >= SAKURA_DRIFT_MAX) sakuraDrift.shift();
+    const anchor = sakuraDrift.length && Math.random() < 0.7
+      ? sakuraDrift[Math.floor(Math.random() * sakuraDrift.length)].x : Math.random();
+    const p = {
+      x: Math.min(1, Math.max(0, anchor + (Math.random() - 0.5) * 0.05)),
+      y: 0.006 + Math.pow(Math.random(), 1.6) * 0.06,     // heaped low, on the floor
+      r: (Math.random() * 360) | 0,
+      s: (0.5 + Math.random() * 0.6).toFixed(2),
+      o: (0.6 + Math.random() * 0.35).toFixed(2),
+      c: SAKURA_PETAL_COLOURS[(Math.random() * SAKURA_PETAL_COLOURS.length) | 0]
+    };
+    sakuraDrift.push(p);
+    if(drift){
+      drift.appendChild(driftPetalNode(p, W, H));
+      while(drift.childNodes.length > SAKURA_DRIFT_MAX) drift.removeChild(drift.firstChild);
+    }
+  }
+}
+
+function applySakuraTime(){
+  const host = document.getElementById('canopy');
+  if(!host || !host.querySelector('.tint-night')) return;
+  const L = sakuraLight(sakuraPhase());
+  const set = (sel, v) => { const el = host.querySelector(sel); if(el) el.style.opacity = v.toFixed(3); };
+  set('.tint-golden', L.golden);
+  set('.tint-dusk', L.dusk);
+  set('.tint-night', L.night);
+  set('.sakura-lanterns', L.lantern);
+}
+/* the light is re-read every few seconds; each change is a slow fade */
+setInterval(applySakuraTime, 5000);
+
 function startGame(){
+  if(!sakuraClockStart) sakuraClockStart = Date.now();   // the day begins with the first run
   balloons = MAX_BALLOONS;
   balloonsSaved = 0; score = 0;
   roundsLost = 0;
@@ -6605,6 +6803,7 @@ function showResult(won, saved){
 
     winStreak++;
     if(winStreak >= 7){ winStreak = 0; regenerateATField(); }
+    if(document.body.getAttribute('data-theme') === 'sakura') addSakuraPetals(6);
     balloonsSaved += saved; score += saved*10 + 20;
     const msg = document.getElementById('result-balloons-msg');
     msg.textContent = saved > 0
@@ -7010,6 +7209,7 @@ function drawCanopy(){
 
   if (theme === 'sakura'){
     buildSakuraGrove({ front, back, defs, W, H, rand, pick, blocked, gutter, floor });
+    buildSakuraDay(host, W, H);
     return;
   }
   if (theme === 'tokyo3'){
