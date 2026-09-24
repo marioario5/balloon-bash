@@ -5994,9 +5994,10 @@ function buildSakuraDay(host, W, H){
   const night = canvas('sky-tint tint-night');
   const nc = night.getContext('2d');
   const sky = nc.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, 'rgba(3,8,30,0.95)');
-  sky.addColorStop(0.6, 'rgba(4,10,34,0.93)');
-  sky.addColorStop(1, 'rgba(5,10,30,0.92)');
+  /* not quite opaque: a very faint trace of the grove's pink comes through */
+  sky.addColorStop(0, 'rgba(3,8,30,0.93)');
+  sky.addColorStop(0.6, 'rgba(5,9,33,0.895)');
+  sky.addColorStop(1, 'rgba(6,9,30,0.9)');
   nc.fillStyle = sky; nc.fillRect(0, 0, W, H);
   host.appendChild(night);
 
