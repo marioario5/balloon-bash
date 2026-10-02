@@ -1114,9 +1114,12 @@ body.sakura-ff .sky-tint, body.sakura-ff .sakura-lanterns{transition:opacity .2s
 /* ── Cherry Blossom: the day going by ─────────────────────────────── */
 .sky-tint{position:absolute;inset:0;pointer-events:none;opacity:0;will-change:opacity;
   transition:opacity 5s linear;}
-.tint-golden{background:radial-gradient(70% 55% at 50% 72%, rgba(255,190,110,.30), transparent 72%),
-  linear-gradient(180deg, rgba(255,176,96,.22) 0%, rgba(255,150,70,.38) 60%, rgba(240,120,60,.42) 100%);}
-.tint-dusk{background:linear-gradient(180deg, rgba(8,34,175,.86) 0%, rgba(12,38,160,.78) 55%, rgba(14,24,105,.74) 100%);}
+.tint-golden{background:radial-gradient(70% 55% at 50% 72%, rgba(255,190,110,.30), transparent 72%);}
+/* the sky's colour: one layer whose gradient is re-coloured as the day goes
+   by (see skyWash), rather than separate golden and blue layers faded over
+   each other — orange and blue laid on top of one another go grey. It is its
+   own compositor layer, so re-colouring it never touches the grove. */
+.sky-wash{position:absolute;inset:0;pointer-events:none;will-change:opacity;}
 /* the night and the lantern light are canvases, painted in buildSakuraDay */
 canvas.sky-tint{width:100%;height:100%;}
 .lantern-light{position:absolute;inset:0;pointer-events:none;opacity:0;will-change:opacity;transition:opacity 5s linear;}
@@ -5958,33 +5961,70 @@ function sakuraHold(on){
   }
 }
 
+/* The colour of the sky across the day. Each row is a moment (p) and the
+   colour of the top, middle and bottom of the sky then, as r,g,b,alpha.
+   Between rows the colours are blended together, so the light passes through
+   the colours a real evening does — gold, then rose, then violet, then the
+   blue hour — instead of the grey you get from laying orange and blue over
+   each other. The golden and blue rows are the two looks that stay as they
+   were; the rows between them are what carry you from one to the other. */
+const SKY_WASH = [
+  [0.30, [255,176, 96,  0],   [255,150, 70,  0],   [240,120, 60,  0]],     // plain day: nothing
+  [0.40, [255,176, 96,.22],   [255,150, 70,.38],   [240,120, 60,.42]],     // golden hour
+  [0.455,[210,108,150,.34],   [255,128,104,.40],   [255,112, 72,.44]],     // rose over coral
+  [0.49, [128, 72,172,.60],   [196, 84,150,.54],   [236, 96,104,.52]],     // violet over magenta over red
+  [0.52, [  8, 34,175,.86],   [ 12, 38,160,.78],   [ 14, 24,105,.74]],     // blue hour
+  [0.57, [  8, 34,175,.62],   [ 12, 38,160,.56],   [ 14, 24,105,.54]],
+  [0.63, [  8, 34,175,  0],   [ 12, 38,160,  0],   [ 14, 24,105,  0]]      // gone: night has taken over
+];
+function skyWash(q){
+  let k = 0;
+  while(k < SKY_WASH.length - 2 && q > SKY_WASH[k + 1][0]) k++;
+  const a = SKY_WASH[k], b = SKY_WASH[k + 1];
+  const t = Math.max(0, Math.min(1, (q - a[0]) / (b[0] - a[0])));
+  /* blended premultiplied, so a colour fading in from nothing does not
+     drag the others towards black */
+  const mix = (ca, cb) => {
+    const al = ca[3] + (cb[3] - ca[3]) * t;
+    if(al < 0.002) return 'rgba(0,0,0,0)';
+    const ch = n => Math.round(((ca[n] * ca[3]) + (cb[n] * cb[3] - ca[n] * ca[3]) * t) / al);
+    return `rgba(${ch(0)},${ch(1)},${ch(2)},${al.toFixed(3)})`;
+  };
+  return `linear-gradient(180deg, ${mix(a[1], b[1])} 0%, ${mix(a[2], b[2])} 58%, ${mix(a[3], b[3])} 100%)`;
+}
+
 /* how strongly each light is showing at a point in the day */
 function sakuraLight(p){
   const bump = (a, b, c) => p <= a || p >= c ? 0 : p < b ? (p - a) / (b - a) : (c - p) / (c - b);
   const rise = (a, b) => p <= a ? 0 : p >= b ? 1 : (p - a) / (b - a);
+  const ease = x => x * x * (3 - 2 * x);
   if(p > 1){
-    /* night back round to morning: the lanterns go out first, then the
-       dark lifts through a pink dawn and a little gold into plain day */
+    /* night back round to morning: the lanterns go out first, then the dark
+       lifts, and the sky runs the evening's colours backwards — blue,
+       violet, rose, gold — into plain day */
     const u = (p - 1) / (SAKURA_CYCLE - 1);
-    const b = (a, m, c) => u <= a || u >= c ? 0 : u < m ? (u - a) / (m - a) : (c - u) / (c - m);
+    const night = Math.max(0, 1 - u / 0.6);
     return {
-      golden:  0.7 * b(0.40, 0.70, 1.00),
-      dusk:    0.8 * b(0.10, 0.40, 0.75),
-      night:   Math.max(0, 1 - u / 0.6),
+      q:       0.63 - 0.33 * u,
+      glow:    0.8 * (u <= 0.45 || u >= 0.95 ? 0 : u < 0.68 ? (u - 0.45) / 0.23 : (0.95 - u) / 0.27),
+      night,
+      lit:     night * night,
       lantern: Math.max(0, 1 - u / 0.3)
     };
   }
+  const night = ease(rise(0.54, 0.64));
   return {
-    golden:  bump(0.30, 0.40, 0.52),
-    dusk:    bump(0.44, 0.52, 0.60),     // blue hour is brief
-    night:   rise(0.54, 0.64),
-    lantern: rise(0.56, 0.66)
+    q:       p,
+    glow:    bump(0.30, 0.40, 0.50),
+    night,
+    lit:     night * night,               // the lantern-lit trees show once it is properly dark
+    lantern: ease(rise(0.56, 0.66))
   };
 }
 
 function buildSakuraDay(host, W, H){
   const NS = 'http://www.w3.org/2000/svg';
-  const layer = cls => { const d = document.createElement('div'); d.className = 'sky-tint ' + cls; host.appendChild(d); return d; };
+  const layer = cls => { const d = document.createElement('div'); d.className = (cls === 'sky-wash' ? '' : 'sky-tint ') + cls; host.appendChild(d); return d; };
   /* the fallen petals: their own little SVG along the floor, under the
      light so night darkens them with everything else */
   const drift = document.createElementNS(NS, 'svg');
@@ -5993,8 +6033,8 @@ function buildSakuraDay(host, W, H){
   drift.setAttribute('preserveAspectRatio', 'none');
   host.appendChild(drift);
   sakuraDrift.forEach(p => drift.appendChild(driftPetalNode(p, W, H)));
+  layer('sky-wash');
   layer('tint-golden');
-  layer('tint-dusk');
 
   /* Yozakura, after photographs of the Meguro River at night: the sky and
      everything away from the lights go almost black, and the paper lanterns
@@ -6123,7 +6163,7 @@ function buildSakuraDay(host, W, H){
   });
   host.appendChild(lan);
 
-  applySakuraTime();
+  applySakuraTime(true);
 }
 
 function driftPetalNode(p, W, H){
@@ -6161,20 +6201,39 @@ function addSakuraPetals(count){
   }
 }
 
-function applySakuraTime(){
+/* `instant` is for a freshly drawn scene. Every redraw (each new word, a
+   resize, a change of screen) makes new layers, and new layers start at
+   opacity 0 with a 5s fade — so without this the night snapped back to day
+   on each word and then faded in again. They are born already at the right
+   strength instead. */
+function applySakuraTime(instant){
   const host = document.getElementById('canopy');
   if(!host || !host.querySelector('.tint-night')) return;
   stepSakuraClock();
   const L = sakuraLight(sakuraPhase());
-  const set = (sel, v) => { const el = host.querySelector(sel); if(el) el.style.opacity = v.toFixed(3); };
-  set('.tint-golden', L.golden);
-  set('.tint-dusk', L.dusk);
+  const born = [];
+  const set = (sel, v) => {
+    const el = host.querySelector(sel);
+    if(!el) return;
+    if(instant){ el.style.transition = 'none'; born.push(el); }
+    el.style.opacity = v.toFixed(3);
+  };
+  const wash = host.querySelector('.sky-wash');
+  if(wash) wash.style.background = skyWash(L.q);
+  set('.tint-golden', L.glow);
   set('.tint-night', L.night);
   set('.sakura-lanterns', L.lantern);
-  set('.lantern-light', L.lantern);
+  set('.lantern-light', L.lit);
+  if(born.length){
+    /* make the browser settle the new values now, with no fade, and only
+       then give the fade back — it never depends on a frame being drawn */
+    void host.offsetWidth;
+    born.forEach(el => { el.style.transition = ''; });
+  }
 }
-/* the light is re-read every few seconds; each change is a slow fade */
-setInterval(applySakuraTime, 5000);
+/* re-read every second: the sky is recoloured in tiny steps and the
+   opacity layers glide between them, so the light never moves in jumps */
+setInterval(applySakuraTime, 1000);
 
 /* ── Winter: the wolf ──────────────────────────────────────────────────
    Five words right in a run and a wild wolf comes out of the trees at the
